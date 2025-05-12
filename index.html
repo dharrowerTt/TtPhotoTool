@@ -3,7 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EXIF & Metadata Photo Report</title>
+    <title>Photolog Generator</title>
+    <!-- Meta tags for basic info -->
+    <meta name="author" content="Photolog Tool by Tetra Tech" />
+    <meta
+      name="description"
+      content="Upload images and metadata to generate formatted photo logs as Word documents."
+    />
+    <meta
+      name="keywords"
+      content="photolog, photo report, Word export, image metadata, Excel, project documentation"
+    />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:title" content="Photolog Generator" />
+    <meta
+      property="og:description"
+      content="Easily generate Word-based photo reports from your project images and metadata."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ttemiprod.com/PhotoLog" />
+    <meta
+      property="og:image"
+      content="hhttps://ttemiprod.com/PhotoLog/photolog-preview.png"
+    />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Photolog Generator" />
+    <meta
+      name="twitter:description"
+      content="Generate photo documentation reports using images and Excel metadata."
+    />
+    <meta
+      name="twitter:image"
+      content="https://ttemiprod.com/PhotoLog/photolog-preview.png"
+    />
+
+    <!-- Favicon -->
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -218,15 +257,12 @@
     <div id="report-content" class="container d-none"></div>
 
     <script>
-      // Attach change event listeners to all radio buttons named "uploadType"
       document.querySelectorAll('input[name="uploadType"]').forEach((radio) => {
         radio.addEventListener("change", () => {
-          // Hide all upload method input groups by default
           document.getElementById("zipUploadGroup").classList.add("d-none");
           document.getElementById("multiUploadGroup").classList.add("d-none");
           document.getElementById("folderUploadGroup").classList.add("d-none");
 
-          // Show the relevant file input group based on selected upload option
           if (document.getElementById("zipOption").checked) {
             document
               .getElementById("zipUploadGroup")
@@ -248,13 +284,10 @@
       let unmatchedImages = [];
       let unmatchedExcelRows = [];
 
-      // Handles user file uploads and prepares matched metadata for report generation
       async function processFiles() {
-        // Reset previous unmatched results
         unmatchedImages = [];
         unmatchedExcelRows = [];
 
-        // Retrieve basic project info from input fields
         const projectName = document.getElementById("projectName").value;
         const siteLocation = document.getElementById("siteLocation").value;
         const projectNumber = document.getElementById("projectNumber").value;
@@ -263,20 +296,17 @@
           'input[name="uploadType"]:checked'
         )?.value;
 
-        // Ensure Excel metadata is uploaded
         if (!excelFile) {
           Swal.fire("Error", "Please upload the Excel metadata file.", "error");
           return;
         }
 
-        // Parse Excel data into structured rows
         const excelData = await parseExcel(excelFile);
-        const imageMap = new Map(); // Maps filenames to image object URLs
+        const imageMap = new Map();
+
         let imageSources = [];
 
-        // Handle each image upload method
         if (uploadType === "zip") {
-          // Process ZIP archive of images
           const zipFile = document.getElementById("zipUpload").files[0];
           if (!zipFile) {
             Swal.fire("Error", "Please upload a ZIP file of images.", "error");
@@ -291,18 +321,15 @@
           for (const entry of entries) {
             const blob = await entry.async("blob");
             const url = URL.createObjectURL(blob);
-            const fileName = entry.name.split("/").pop(); // Extract just the filename
+            const fileName = entry.name.split("/").pop();
             imageMap.set(fileName, url);
           }
         } else if (uploadType === "multi") {
-          // User selected multiple individual files
           imageSources = [...document.getElementById("multiUpload").files];
         } else if (uploadType === "folder") {
-          // User selected a folder (via webkitdirectory)
           imageSources = [...document.getElementById("folderUpload").files];
         }
 
-        // For non-ZIP modes, filter for image files and add them to the map
         if (uploadType !== "zip") {
           for (const file of imageSources) {
             if (/\.(jpg|jpeg|png)$/i.test(file.name)) {
@@ -311,13 +338,11 @@
           }
         }
 
-        // Fail gracefully if no valid images were found
         if (imageMap.size === 0) {
           Swal.fire("Error", "No valid image files were found.", "error");
           return;
         }
 
-        // Match Excel rows to uploaded images based on Attachment_Name
         const matchedData = excelData
           .map((row) => {
             if (imageMap.has(row.Attachment_Name)) {
@@ -329,148 +354,126 @@
           })
           .filter(Boolean);
 
-        // Identify uploaded images not referenced in Excel
         imageMap.forEach((_, imageName) => {
           if (!excelData.some((row) => row.Attachment_Name === imageName)) {
             unmatchedImages.push(imageName);
           }
         });
 
-        // Generate visual report content
         generateReport(matchedData, projectName, siteLocation, projectNumber);
 
-        // Reveal download options
         document.getElementById("export-word").style.display = "block";
         document.getElementById("download-log").style.display = "block";
       }
 
-      // Parses an Excel file and normalizes metadata for report generation
       async function parseExcel(file) {
-        // Read the Excel file as an ArrayBuffer and parse it into a workbook
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data, { type: "array" });
-
-        // Extract the first worksheet
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-
-        // Convert the worksheet to JSON format (array of row objects)
         const jsonData = XLSX.utils.sheet_to_json(sheet);
 
-        // Normalize and clean up each row of metadata
         return jsonData.map((row) => {
-          const convertedRow = { ...row };
+          let convertedRow = { ...row };
 
-          // Convert Excel serial date to human-readable string if necessary
+          // **Fix Date/Time if it's a serial number**
           if (typeof row["EXIF_ImageDateTime_Text"] === "number") {
             convertedRow["EXIF_ImageDateTime_Text"] = excelDateToJSDate(
               row["EXIF_ImageDateTime_Text"]
             );
           }
 
-          // Standardize the Photo Direction field (fallback if missing)
+          // **Ensure correct Photo Direction field is used**
           convertedRow["Photo Direction"] = row["Direction_Photo"] || "Unknown";
 
           return convertedRow;
         });
       }
 
-      // Converts an Excel date serial number to a human-readable JavaScript date string
+      // Convert Excel date serial number to JavaScript Date
       function excelDateToJSDate(serial) {
-        // Excel stores dates as the number of days since January 1, 1900
-        const utcDays = Math.floor(serial - 25569); // 25569 is the number of days between 1/1/1900 and 1/1/1970
-        const utcValue = utcDays * 86400; // Convert days to seconds
-
-        // Extract the fractional portion of the day to get time
+        const utcDays = Math.floor(serial - 25569);
+        const utcValue = utcDays * 86400; // Seconds
         const fractionalDay = serial - Math.floor(serial);
         const totalSeconds = Math.floor(fractionalDay * 86400);
 
-        // Combine date and time, and convert to milliseconds for JS Date
-        const date = new Date((utcValue + totalSeconds) * 1000);
-
-        // Return a localized date string (e.g., "12/4/2024, 10:44:00 AM")
-        return date.toLocaleString();
+        const date = new Date((utcValue + totalSeconds) * 1000); // Total milliseconds
+        return date.toLocaleString(); // e.g., "12/4/2024, 10:44:00 AM"
       }
 
-      //Renders a preview of the photo report on the page using uploaded metadata and images.
       function generateReport(data, projectName, siteLocation, projectNumber) {
         const reportContent = document.getElementById("report-content");
         reportContent.classList.remove("d-none");
-
-        // Initialize report header with project metadata
         reportContent.innerHTML = `
-    <h2 class="text-center">PHOTOGRAPH LOG</h2>
-    <table class="table">
-      <tr>
-        <td><strong>Project Name:</strong> ${projectName}</td>
-        <td><strong>Site Location:</strong> ${siteLocation}</td>
-        <td><strong>Project No.:</strong> ${projectNumber}</td>
-      </tr>
-    </table>
-  `;
+          <h2 class="text-center">PHOTOGRAPH LOG</h2>
+          <table class="table">
+            <tr>
+              <td><strong>Project Name:</strong> ${projectName}</td>
+              <td><strong>Site Location:</strong> ${siteLocation}</td>
+              <td><strong>Project No.:</strong> ${projectNumber}</td>
+            </tr>
+          </table>
+        `;
 
-        // Add one photo + metadata table per entry
-        data.forEach((item) => {
+        data.forEach((item, index) => {
           reportContent.innerHTML += `
-      <table class="report-table">
-        <tr>
-          <td class="metadata-label"><strong>Date/Time Taken:</strong></td>
-          <td class="metadata-value">${
-            item["EXIF_ImageDateTime_Text"] || "Unknown"
-          }</td>
-          <td rowspan="8" class="photo-container">
-            <img src="${item.imageUrl}" alt="Photo">
-          </td>
-        </tr>
-        <tr class="striped-row">
-          <td class="metadata-label"><strong>Photographer:</strong></td>
-          <td class="metadata-value">${item["Photographer"] || "Unknown"}</td>
-        </tr>
-        <tr>
-          <td class="metadata-label"><strong>Latitude:</strong></td>
-          <td class="metadata-value">${
-            item["FeatureLatitude"] || "Unknown"
-          }</td>
-        </tr>
-        <tr class="striped-row">
-          <td class="metadata-label"><strong>Longitude:</strong></td>
-          <td class="metadata-value">${
-            item["FeatureLongitude"] || "Unknown"
-          }</td>
-        </tr>
-        <tr>
-          <td class="metadata-label"><strong>Photo Direction:</strong></td>
-          <td class="metadata-value">${
-            item["Photo Direction"] || "Unknown"
-          }</td>
-        </tr>
-        <tr class="striped-row">
-          <td class="metadata-label"><strong>Category:</strong></td>
-          <td class="metadata-value">${item["Category"] || "Unknown"}</td>
-        </tr>
-        <tr>
-          <td class="metadata-label"><strong>Photo Description:</strong></td>
-          <td class="metadata-value">${
-            item["Description"] || "No Description Provided"
-          }</td>
-        </tr>
-        <tr class="striped-row">
-          <td class="metadata-label"><strong>Photo Name:</strong></td>
-          <td class="metadata-value">${
-            item["Attachment_Name"] || "Unknown"
-          }</td>
-        </tr>
-      </table>
-    `;
+            <table class="report-table">
+              <tr>
+                <td class="metadata-label"><strong>Date/Time Taken:</strong></td>
+                <td class="metadata-value">${
+                  item["EXIF_ImageDateTime_Text"] || "Unknown"
+                }</td>
+                <td rowspan="8" class="photo-container"><img src="${
+                  item.imageUrl
+                }" alt="Photo"></td>
+              </tr>
+              <tr class="striped-row">
+                <td class="metadata-label"><strong>Photographer:</strong></td>
+                <td class="metadata-value">${
+                  item["Photographer"] || "Unknown"
+                }</td>
+              </tr>
+              <tr>
+                <td class="metadata-label"><strong>Latitude:</strong></td>
+                <td class="metadata-value">${
+                  item["FeatureLatitude"] || "Unknown"
+                }</td>
+              </tr>
+              <tr class="striped-row">
+                <td class="metadata-label"><strong>Longitude:</strong></td>
+                <td class="metadata-value">${
+                  item["FeatureLongitude"] || "Unknown"
+                }</td>
+              </tr>
+              <tr>
+                <td class="metadata-label"><strong>Photo Direction:</strong></td>
+                <td class="metadata-value">${
+                  item["Photo Direction"] || "Unknown"
+                }</td>
+              </tr>
+              <tr class="striped-row">
+                <td class="metadata-label"><strong>Category:</strong></td>
+                <td class="metadata-value">${item["Category"] || "Unknown"}</td>
+              </tr>
+              <tr>
+                <td class="metadata-label"><strong>Photo Description:</strong></td>
+                <td class="metadata-value">${
+                  item["Description"] || "No Description Provided"
+                }</td>
+              </tr>
+              <tr class="striped-row">
+                <td class="metadata-label"><strong>Photo Name:</strong></td>
+                <td class="metadata-value">${
+                  item["Attachment_Name"] || "Unknown"
+                }</td>
+              </tr>
+            </table>
+          `;
         });
-
-        // Show export buttons
         document.getElementById("export-word").style.display = "block";
         document.getElementById("download-log").style.display = "block";
       }
 
-      // Generates and downloads a log file listing unmatched images and unmatched Excel entries.
       function downloadLogFile() {
-        // Only proceed if there are unmatched items
         if (unmatchedImages.length || unmatchedExcelRows.length) {
           Swal.fire(
             "Warning",
@@ -478,7 +481,6 @@
             "warning"
           );
 
-          // Build log content string with timestamp and unmatched details
           const logContent =
             `Photo Report Log - Generated on ${new Date().toISOString()}\n\n` +
             `Skipped Images (Not in Excel):\n${unmatchedImages.join(
@@ -486,13 +488,12 @@
             )}\n\n` +
             `Skipped Excel Rows (Missing Image):\n${unmatchedExcelRows.join(
               "\n"
-            )}\n\n` +
-            "End of Log.";
+            )}\n\nEnd of Log.`;
 
-          // Also output the log to the browser console for developer visibility
+          // Console log the report log
           console.log("Photo Report Log:\n", logContent);
 
-          // Create and trigger a download of the log as a .txt file
+          // Create downloadable file
           const blob = new Blob([logContent], { type: "text/plain" });
           const link = document.createElement("a");
           link.href = URL.createObjectURL(blob);
@@ -501,7 +502,6 @@
           link.click();
           document.body.removeChild(link);
         } else {
-          // If everything matched, inform the user there's no log needed
           Swal.fire(
             "Info",
             "No unmatched images or Excel rows. Nothing to log.",
@@ -510,7 +510,6 @@
         }
       }
 
-      //Displays a modal prompting the user to choose between Template A or Template B.
       function chooseTemplate() {
         Swal.fire({
           title: "Choose Report Template",
@@ -520,24 +519,17 @@
             b: "Template B<br>(1 image per page)",
           },
           inputValidator: (value) => {
-            // Ensure a selection was made before allowing confirmation
             if (!value) return "Please select a template";
           },
         }).then((result) => {
-          // Run the appropriate export function based on the user's selection
           if (result.isConfirmed) {
-            if (result.value === "a") {
-              exportTemplateA();
-            } else {
-              exportTemplateB();
-            }
+            if (result.value === "a") exportTemplateA();
+            else exportTemplateB();
           }
         });
       }
 
-      //Exports Report As TemplateA (2 images per page)
       async function exportTemplateA() {
-        // Show a loading alert while the Word document is being generated
         Swal.fire({
           title: "Generating Word Document...",
           text: "Please wait while we build your report.",
@@ -545,7 +537,6 @@
           didOpen: () => Swal.showLoading(),
         });
 
-        // Import required classes from the docx library
         const {
           Document,
           Packer,
@@ -567,10 +558,8 @@
           HeightRule,
         } = window.docx;
 
-        // Helper function to convert inches to DXA units used by docx
         const inchToDxa = (inches) => Math.floor(inches * 1440);
 
-        // Collect metadata values from the form (fallback to 'Unknown' if blank)
         const projectName =
           document.getElementById("projectName").value || "Unknown";
         const siteLocation =
@@ -581,28 +570,25 @@
         const reportContent = document.getElementById("report-content");
         const tables = reportContent.querySelectorAll(".report-table");
 
-        const children = []; // This array will hold the document body content
+        const children = [];
 
-        // Load and convert the Tetra Tech and EPA logos to ArrayBuffers
         const logoResponse = await fetch("tetra-tech-logo.png");
         const logoBuffer = await logoResponse.arrayBuffer();
 
         const epaLogoResponse = await fetch("epa-logo.png");
         const epaLogoBuffer = await epaLogoResponse.arrayBuffer();
 
-        // Build the document header (logo row + metadata row)
         const header = new Header({
           children: [
-            // Row 1: Logo Left, Title Center, Logo Right
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               borders: {
-                top: none(),
-                bottom: none(),
-                left: none(),
-                right: none(),
-                insideHorizontal: none(),
-                insideVertical: none(),
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+                insideHorizontal: { style: BorderStyle.NONE },
+                insideVertical: { style: BorderStyle.NONE },
               },
               rows: [
                 new TableRow({
@@ -617,7 +603,7 @@
                               transformation: {
                                 width: 100,
                                 height: Math.round(100 / 3.76),
-                              },
+                              }, // height ≈ 27
                               type: "png",
                             }),
                           ],
@@ -649,7 +635,7 @@
                               transformation: {
                                 width: 80,
                                 height: Math.round(80 / 3.29),
-                              },
+                              }, // ≈ 24
                               type: "png",
                             }),
                           ],
@@ -660,29 +646,109 @@
                 }),
               ],
             }),
-
-            // Row 2: Project metadata (name, location, number)
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
-              borders: solidTopBottom(),
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 6, color: "000000" },
+                bottom: { style: BorderStyle.SINGLE, size: 6, color: "000000" },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+                insideHorizontal: { style: BorderStyle.NONE },
+                insideVertical: { style: BorderStyle.NONE },
+              },
               rows: [
                 new TableRow({
                   children: [
-                    createMetadataCell(
-                      "Project Name:",
-                      projectName,
-                      AlignmentType.LEFT
-                    ),
-                    createMetadataCell(
-                      "Site Location:",
-                      siteLocation,
-                      AlignmentType.CENTER
-                    ),
-                    createMetadataCell(
-                      "Project Number:",
-                      projectNumber,
-                      AlignmentType.RIGHT
-                    ),
+                    new TableCell({
+                      borders: {
+                        top: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        bottom: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                      },
+                      margins: { top: 100, bottom: 100 }, // 🆕 Adds ~0.07" padding
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.LEFT,
+                          children: [
+                            new TextRun({
+                              text: "Project Name:",
+                              bold: true,
+                              underline: {},
+                              font: "Arial",
+                            }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: projectName, font: "Arial" }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      borders: {
+                        top: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        bottom: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                      },
+                      margins: { top: 100, bottom: 100 }, // 🆕 Adds ~0.07" padding
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          children: [
+                            new TextRun({
+                              text: "Site Location:",
+                              bold: true,
+                              underline: {},
+                              font: "Arial",
+                            }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: siteLocation, font: "Arial" }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      borders: {
+                        top: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        bottom: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                      },
+                      margins: { top: 100, bottom: 100 }, // 🆕 Adds ~0.07" padding
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.RIGHT,
+                          children: [
+                            new TextRun({
+                              text: "Project Number:",
+                              bold: true,
+                              underline: {},
+                              font: "Arial",
+                            }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: projectNumber, font: "Arial" }),
+                          ],
+                        }),
+                      ],
+                    }),
                   ],
                 }),
               ],
@@ -690,7 +756,6 @@
           ],
         });
 
-        // Build the footer with dynamic page numbering
         const footer = new Footer({
           children: [
             new Paragraph({
@@ -713,13 +778,11 @@
           ],
         });
 
-        // Process each photo/metadata table
         for (let i = 0; i < tables.length; i++) {
           const table = tables[i];
           const rows = table.querySelectorAll("tr");
           const imgTag = table.querySelector("img");
 
-          // Extract metadata rows as { label, value } pairs
           const metadata = Array.from(rows)
             .map((row) => {
               const cells = row.querySelectorAll("td");
@@ -734,20 +797,49 @@
 
           let imageCell;
 
-          // Convert <img> into an ImageRun inside a TableCell
           if (imgTag?.src) {
             try {
-              const tempImg = await loadImage(imgTag.src);
-              const canvas = drawToCanvas(tempImg);
-              const blob = await getBlob(canvas);
+              const tempImg = new Image();
+              tempImg.crossOrigin = "anonymous";
+              tempImg.src = imgTag.src;
+              await new Promise((resolve) => (tempImg.onload = resolve));
+
+              const canvas = document.createElement("canvas");
+              canvas.width = tempImg.naturalWidth;
+              canvas.height = tempImg.naturalHeight;
+              canvas.getContext("2d").drawImage(tempImg, 0, 0);
+
+              const blob = await new Promise((resolve) =>
+                canvas.toBlob((b) => {
+                  if (!b) {
+                    console.warn(
+                      "❗ Image blob generation failed for",
+                      imgTag.src
+                    );
+                    resolve(null);
+                  } else {
+                    resolve(b);
+                  }
+                }, "image/png")
+              );
+
               if (!blob) continue;
 
               const buffer = await blob.arrayBuffer();
-              const { scaledWidth, scaledHeight } = scaleImage(
-                tempImg,
-                5.1 * 96,
-                4.5 * 96
-              );
+
+              const maxPortraitHeight = 4.5 * 96;
+              const maxLandscapeWidth = 5.1 * 96; // ~7.3 inches = 7008 DXA
+              const isPortrait = tempImg.naturalHeight > tempImg.naturalWidth;
+
+              let scale;
+              if (isPortrait) {
+                scale = Math.min(1, maxPortraitHeight / tempImg.naturalHeight);
+              } else {
+                scale = Math.min(1, maxLandscapeWidth / tempImg.naturalWidth);
+              }
+
+              const scaledWidth = Math.round(tempImg.naturalWidth * scale);
+              const scaledHeight = Math.round(tempImg.naturalHeight * scale);
 
               imageCell = new TableCell({
                 verticalAlign: VerticalAlign.CENTER,
@@ -775,39 +867,123 @@
             }
           }
 
-          // Build the Word TableRow array for this image block
           const wordRows = metadata.map((meta, index) => {
             const shaded = index % 2 === 0;
 
-            // Large two-column row for description
             if (meta.label === "Photo Description:") {
               return new TableRow({
                 height: { value: inchToDxa(2), rule: HeightRule.AT_LEAST },
                 children: [
-                  createDescriptionCell(meta.label, meta.value, shaded),
+                  new TableCell({
+                    columnSpan: 2,
+                    width: { size: 3312, type: WidthType.DXA },
+                    verticalAlign: VerticalAlign.TOP,
+                    margins: { top: 72, bottom: 72, left: 72, right: 72 },
+                    shading: shaded
+                      ? {
+                          fill: "F2F2F2",
+                          type: ShadingType.CLEAR,
+                          color: "auto",
+                        }
+                      : undefined,
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.LEFT,
+                        children: [
+                          new TextRun({
+                            text: meta.label,
+                            bold: true,
+                            font: "Arial",
+                          }),
+                          new TextRun({ break: 1 }),
+                          new TextRun({
+                            text: meta.value || "No Description Provided",
+                            font: "Arial",
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
                   ...(index === 0 && imageCell ? [imageCell] : []),
                 ],
               });
             }
 
-            // Compact two-column row for photo name
             if (meta.label === "Photo Name:") {
               return new TableRow({
                 height: { value: inchToDxa(0.4), rule: HeightRule.AT_LEAST },
                 children: [
-                  createNameCell(meta.label, meta.value),
-                  ...(index === 0 && imageCell ? [imageCell] : []),
+                  new TableCell({
+                    columnSpan: 2,
+                    width: { size: 3312, type: WidthType.DXA },
+                    verticalAlign: VerticalAlign.CENTER,
+                    margins: { bottom: 24, left: 72, right: 72 },
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.LEFT,
+                        children: [
+                          new TextRun({
+                            text: meta.label,
+                            bold: true,
+                            font: "Arial",
+                          }),
+                          new TextRun({
+                            text: meta.value || "Unknown",
+                            font: "Arial",
+                            break: 1,
+                          }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  ...(index === 0 ? [imageCell] : []),
                 ],
               });
             }
 
-            // Standard label-value rows
             const baseCells = [
-              createMetadataPairCell(meta.label, true, shaded),
-              createMetadataPairCell(meta.value || "Unknown", false, shaded),
+              new TableCell({
+                width: { size: 1656, type: WidthType.DXA },
+                verticalAlign: VerticalAlign.CENTER,
+                margins: { left: 72, right: 72 },
+                shading: shaded
+                  ? { fill: "F2F2F2", type: ShadingType.CLEAR, color: "auto" }
+                  : undefined,
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: meta.label,
+                        bold: true,
+                        font: "Arial",
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+              new TableCell({
+                width: { size: 1656, type: WidthType.DXA },
+                verticalAlign: VerticalAlign.CENTER,
+                margins: { left: 72, right: 72 },
+                shading: shaded
+                  ? { fill: "F2F2F2", type: ShadingType.CLEAR, color: "auto" }
+                  : undefined,
+                children: [
+                  new Paragraph({
+                    alignment: AlignmentType.LEFT,
+                    children: [
+                      new TextRun({
+                        text: meta.value || "Unknown",
+                        font: "Arial",
+                      }),
+                    ],
+                  }),
+                ],
+              }),
             ];
 
-            if (index === 0 && imageCell) baseCells.push(imageCell);
+            if (index === 0) baseCells.push(imageCell);
 
             return new TableRow({
               height: { value: inchToDxa(0.34), rule: HeightRule.AT_LEAST },
@@ -815,7 +991,6 @@
             });
           });
 
-          // Add this table and a spacer paragraph
           children.push(
             new Table({
               rows: wordRows,
@@ -826,7 +1001,6 @@
             new Paragraph({ children: [new TextRun({ text: "", size: 1 })] })
           );
 
-          // Insert page break after every 2 entries, except last
           if ((i + 1) % 2 === 0 && i !== tables.length - 1) {
             children.push(
               new Paragraph({
@@ -837,7 +1011,6 @@
           }
         }
 
-        // Create and download the final Word document
         const fileName = `Photo_Report_${
           new Date().toISOString().split("T")[0]
         }.docx`;
@@ -851,7 +1024,34 @@
               properties: {
                 page: {
                   margin: { top: 475, right: 475, bottom: 475, left: 475 },
-                  borders: fullPageBorders(),
+                  borders: {
+                    top: {
+                      style: BorderStyle.SINGLE,
+                      size: 8,
+                      color: "000000",
+                      space: 24,
+                    },
+                    bottom: {
+                      style: BorderStyle.SINGLE,
+                      size: 8,
+                      color: "000000",
+                      space: 24,
+                    },
+                    left: {
+                      style: BorderStyle.SINGLE,
+                      size: 8,
+                      color: "000000",
+                      space: 24,
+                    },
+                    right: {
+                      style: BorderStyle.SINGLE,
+                      size: 8,
+                      color: "000000",
+                      space: 24,
+                    },
+                    display: docx.PageBorderDisplay.ALL_PAGES,
+                    zOrder: docx.PageBorderZOrder.FRONT,
+                  },
                 },
               },
               headers: { default: header },
@@ -872,9 +1072,7 @@
         saveAs(blob, fileName);
       }
 
-      //Exports Report As TemplateB (1 image per page)
       async function exportTemplateB() {
-        // Show a loading alert while generating the document
         Swal.fire({
           title: "Generating Word Document (Template B)...",
           text: "Please wait while we build your report.",
@@ -882,7 +1080,6 @@
           didOpen: () => Swal.showLoading(),
         });
 
-        // Import required classes from the docx library
         const {
           Document,
           Packer,
@@ -904,10 +1101,8 @@
           HeightRule,
         } = window.docx;
 
-        // Helper to convert inches to DXA units
         const inchToDxa = (inches) => Math.floor(inches * 1440);
 
-        // Get user-entered metadata, fallback to "Unknown"
         const projectName =
           document.getElementById("projectName")?.value?.trim() || "Unknown";
         const siteLocation =
@@ -920,23 +1115,26 @@
 
         const children = [];
 
-        // Load logos as binary data
-        const logoBuffer = await (
-          await fetch("tetra-tech-logo.png")
-        ).arrayBuffer();
-        const epaLogoBuffer = await (await fetch("epa-logo.png")).arrayBuffer();
+        const logoResponse = await fetch("tetra-tech-logo.png");
+        const logoBuffer = await logoResponse.arrayBuffer();
+        const epaLogoResponse = await fetch("epa-logo.png");
+        const epaLogoBuffer = await epaLogoResponse.arrayBuffer();
 
-        // Build header section with logos and title
         const header = new Header({
           children: [
-            // First row: Logos and title
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
-              borders: noBorders(),
+              borders: {
+                top: { style: BorderStyle.NONE },
+                bottom: { style: BorderStyle.NONE },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+                insideHorizontal: { style: BorderStyle.NONE },
+                insideVertical: { style: BorderStyle.NONE },
+              },
               rows: [
                 new TableRow({
                   children: [
-                    // Tetra Tech logo
                     new TableCell({
                       children: [
                         new Paragraph({
@@ -944,14 +1142,13 @@
                           children: [
                             new ImageRun({
                               data: logoBuffer,
-                              transformation: { width: 92, height: 24 },
+                              transformation: { width: 92, height: 24 }, // height ≈ 27
                               type: "png",
                             }),
                           ],
                         }),
                       ],
                     }),
-                    // Title
                     new TableCell({
                       children: [
                         new Paragraph({
@@ -967,7 +1164,6 @@
                         }),
                       ],
                     }),
-                    // EPA logo
                     new TableCell({
                       children: [
                         new Paragraph({
@@ -975,7 +1171,7 @@
                           children: [
                             new ImageRun({
                               data: epaLogoBuffer,
-                              transformation: { width: 80, height: 24 },
+                              transformation: { width: 80, height: 24 }, // ≈ 24
                               type: "png",
                             }),
                           ],
@@ -986,28 +1182,123 @@
                 }),
               ],
             }),
-            // Second row: Project metadata (name, location, number)
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
-              borders: topBottomBorders(),
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 6, color: "000000" },
+                bottom: { style: BorderStyle.SINGLE, size: 6, color: "000000" },
+                left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+                right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
+                insideHorizontal: {
+                  style: BorderStyle.NONE,
+                  size: 0,
+                  color: "FFFFFF",
+                },
+                insideVertical: {
+                  style: BorderStyle.NONE,
+                  size: 0,
+                  color: "FFFFFF",
+                },
+              },
               rows: [
                 new TableRow({
                   children: [
-                    createMetadataCell(
-                      "Project Name: ",
-                      projectName,
-                      AlignmentType.LEFT
-                    ),
-                    createMetadataCell(
-                      "Site Location: ",
-                      siteLocation,
-                      AlignmentType.CENTER
-                    ),
-                    createMetadataCell(
-                      "Project Number: ",
-                      projectNumber,
-                      AlignmentType.RIGHT
-                    ),
+                    new TableCell({
+                      borders: {
+                        top: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        bottom: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        left: { style: BorderStyle.NONE },
+                        right: { style: BorderStyle.NONE },
+                      },
+                      margins: { top: 100, bottom: 100 }, // 🔽 Adds vertical padding (~0.07")
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.LEFT,
+                          children: [
+                            new TextRun({
+                              text: "Project Name: ",
+                              bold: true,
+                              underline: {},
+                              font: "Arial",
+                            }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: projectName, font: "Arial" }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      borders: {
+                        top: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        bottom: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        left: { style: BorderStyle.NONE },
+                        right: { style: BorderStyle.NONE },
+                      },
+                      margins: { top: 100, bottom: 100 }, // 🔽 Adds vertical padding (~0.07")
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          children: [
+                            new TextRun({
+                              text: "Site Location: ",
+                              bold: true,
+                              underline: {},
+                              font: "Arial",
+                            }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: siteLocation, font: "Arial" }),
+                          ],
+                        }),
+                      ],
+                    }),
+                    new TableCell({
+                      borders: {
+                        top: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        bottom: {
+                          style: BorderStyle.SINGLE,
+                          size: 6,
+                          color: "000000",
+                        },
+                        left: { style: BorderStyle.NONE },
+                        right: { style: BorderStyle.NONE },
+                      },
+                      margins: { top: 100, bottom: 100 }, // 🔽 Adds vertical padding (~0.07")
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.RIGHT,
+                          children: [
+                            new TextRun({
+                              text: "Project Number: ",
+                              bold: true,
+                              underline: {},
+                              font: "Arial",
+                            }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: projectNumber, font: "Arial" }),
+                          ],
+                        }),
+                      ],
+                    }),
                   ],
                 }),
               ],
@@ -1015,7 +1306,6 @@
           ],
         });
 
-        // Build footer with page numbers
         const footer = new Footer({
           children: [
             new Paragraph({
@@ -1038,13 +1328,11 @@
           ],
         });
 
-        // Loop through each table in the report-content area
         for (let i = 0; i < tables.length; i++) {
           const table = tables[i];
           const rows = table.querySelectorAll("tr");
           const imgTag = table.querySelector("img");
 
-          // Extract metadata into a key-value object
           const metadata = {};
           rows.forEach((row) => {
             const cells = row.querySelectorAll("td");
@@ -1055,7 +1343,6 @@
             }
           });
 
-          // Initialize image row placeholder
           let imageRow = new TableRow({
             children: [
               new TableCell({
@@ -1066,7 +1353,6 @@
             ],
           });
 
-          // If there's an image, convert it to a centered ImageRun
           if (imgTag?.src) {
             const tempImg = new Image();
             tempImg.crossOrigin = "anonymous";
@@ -1083,22 +1369,21 @@
             );
             const buffer = await blob.arrayBuffer();
 
-            // Scaling image based on orientation
             const DPI = 96;
             const MAX_HEIGHT = 3.94 * DPI;
             const MAX_WIDTH = 7.58 * DPI;
 
             const isPortrait = tempImg.naturalHeight > tempImg.naturalWidth;
             const scale = isPortrait
-              ? (8.5 * DPI) / tempImg.naturalHeight
-              : Math.min(1, MAX_WIDTH / tempImg.naturalWidth);
+              ? (8.5 * DPI) / tempImg.naturalHeight // scale to full cell height
+              : Math.min(1, MAX_WIDTH / tempImg.naturalWidth); // landscape stays width-limited
 
             const scaledWidth = Math.round(tempImg.naturalWidth * scale);
             const scaledHeight = Math.round(tempImg.naturalHeight * scale);
 
             imageRow = new TableRow({
               height: {
-                value: inchToDxa(8.5),
+                value: inchToDxa(8.5), // 🔺 7 inches tall
                 rule: HeightRule.EXACT,
               },
               children: [
@@ -1125,10 +1410,8 @@
             });
           }
 
-          // Build metadata rows
           const metaRows = [
             imageRow,
-            // Description row (spans 3 columns)
             new TableRow({
               children: [
                 new TableCell({
@@ -1155,7 +1438,6 @@
                 }),
               ],
             }),
-            // Row for date/time, photographer, category
             new TableRow({
               children: ["Date/Time Taken", "Photographer", "Category"].map(
                 (label) =>
@@ -1179,7 +1461,6 @@
                   })
               ),
             }),
-            // Row for lat, long, direction
             new TableRow({
               children: ["Latitude", "Longitude", "Photo Direction"].map(
                 (label) =>
@@ -1205,7 +1486,6 @@
             }),
           ];
 
-          // Add this photo’s page (with a page break before all except the first)
           children.push(
             new Paragraph({ pageBreakBefore: i !== 0, children: [] }),
             new Table({
@@ -1217,14 +1497,13 @@
           );
         }
 
-        // Generate final document with all sections
         const fileName = `Photo_Report_TemplateB_${
           new Date().toISOString().split("T")[0]
         }.docx`;
 
         const doc = new Document({
           creator: "Photolog Tool",
-          title: fileName,
+          title: fileName, // Optional: match filename
           description: "Photo report generated by web-based photolog tool",
           sections: [
             {
@@ -1241,6 +1520,7 @@
         });
 
         const blob = await Packer.toBlob(doc);
+
         Swal.close();
         saveAs(blob, fileName);
       }
